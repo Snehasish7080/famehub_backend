@@ -1,0 +1,115 @@
+package user
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/gocql/gocql"
+	"github.com/snehasish7080/famehub/pkg/hash"
+	"github.com/snehasish7080/famehub/pkg/jwtclaim"
+	"github.com/snehasish7080/famehub/pkg/otp"
+)
+
+type UserStorage struct {
+	session *gocql.Session
+}
+
+func NewUserStorage(session *gocql.Session) *UserStorage {
+	return &UserStorage{
+		session: session,
+	}
+}
+
+func (u *UserStorage) createUserTables() error {
+	userTable := `CREATE TABLE IF NOT EXISTS users (
+        uuid UUID,
+        email TEXT UNIQUE,
+        password TEXT,
+        otp TEXT,
+        created_at TIMESTAMP,
+        updated_at TIMESTAMP,
+        PRIMARY KEY (uuid)
+    );`
+
+	usersByUsernameTable := `CREATE TABLE IF NOT EXISTS users_by_username (
+        uuid UUID,
+        email TEXT UNIQUE,
+        username TEXT,
+        created_at TIMESTAMP,
+        updated_at TIMESTAMP,
+        PRIMARY KEY (uuid, username)
+    );`
+
+	if err := u.session.Query(userTable).Exec(); err != nil {
+		return err
+	}
+
+	if err := u.session.Query(usersByUsernameTable).Exec(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (u *UserStorage) signUp(email string, password string, ctx context.Context) (string, error) {
+
+	// Create User Table if don't exists.
+	if err := u.createUserTables(); err != nil {
+		return "", err
+	}
+
+	// Check if email already exists
+	exists, err := u.emailExists(email)
+	if err != nil {
+		return "", err
+	}
+
+	if exists {
+		return "", errors.New("email already exists")
+	}
+
+	// Generate Otp
+	generatedOtp := otp.EncodeToString(6)
+	// Generate a new UUID for the user
+
+	UUID := gocql.TimeUUID().String()
+
+	// Generate timestamp for the user
+	currentTime := time.Now().UTC()
+	createdAt := currentTime.Format(time.RFC3339)
+	updatedAt := createdAt
+
+	// Generate hashed password for the user
+	hashedPassword, err := hash.HashPassword(password)
+	if err != nil {
+		return "", err
+	}
+
+	// Insert the new user into the main users table
+	query := `INSERT INTO users (uuid, email, password, otp, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+	if err := u.session.Query(query, UUID, email, hashedPassword, generatedOtp, createdAt, updatedAt).Exec(); err != nil {
+		return "", err
+	}
+
+	query = `INSERT INTO users_by_username (uuid, email, username, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+	if err := u.session.Query(query, UUID, email, "", createdAt, updatedAt).Exec(); err != nil {
+		return "", err
+	}
+
+	verifyToken, err := jwtclaim.CreateJwtToken(email, false)
+	if err != nil {
+		return "", err
+	}
+
+	return verifyToken, nil
+}
+
+func (u *UserStorage) emailExists(email string) (bool, error) {
+	var exists bool
+	query := "SELECT COUNT(*) FROM users WHERE email = ?"
+	if err := u.session.Query(query, email).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
