@@ -24,21 +24,24 @@ func NewUserStorage(session *gocql.Session) *UserStorage {
 func (u *UserStorage) createUserTables() error {
 	userTable := `CREATE TABLE IF NOT EXISTS users (
         uuid UUID,
-        email TEXT UNIQUE,
+        email TEXT,
         password TEXT,
         otp TEXT,
         created_at TIMESTAMP,
         updated_at TIMESTAMP,
-        PRIMARY KEY (uuid)
+        PRIMARY KEY (uuid, email)
     );`
 
 	usersByUsernameTable := `CREATE TABLE IF NOT EXISTS users_by_username (
         uuid UUID,
-        email TEXT UNIQUE,
+        email TEXT,
         username TEXT,
+        fullName TEXT,
+        bio TEXT,
+        isBrand BOOLEAN,
         created_at TIMESTAMP,
         updated_at TIMESTAMP,
-        PRIMARY KEY (uuid, username)
+        PRIMARY KEY (uuid, username, fullName, email)
     );`
 
 	if err := u.session.Query(userTable).Exec(); err != nil {
@@ -76,9 +79,9 @@ func (u *UserStorage) signUp(email string, password string, ctx context.Context)
 	UUID := gocql.TimeUUID().String()
 
 	// Generate timestamp for the user
-	currentTime := time.Now().UTC()
-	createdAt := currentTime.Format(time.RFC3339)
-	updatedAt := createdAt
+	currentTime := time.Now()
+	createdAt := currentTime
+	updatedAt := currentTime
 
 	// Generate hashed password for the user
 	hashedPassword, err := hash.HashPassword(password)
@@ -92,8 +95,8 @@ func (u *UserStorage) signUp(email string, password string, ctx context.Context)
 		return "", err
 	}
 
-	query = `INSERT INTO users_by_username (uuid, email, username, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
-	if err := u.session.Query(query, UUID, email, "", createdAt, updatedAt).Exec(); err != nil {
+	query = `INSERT INTO users_by_username (uuid, email, username, fullName, bio, isBrand, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	if err := u.session.Query(query, UUID, email, "", "", "", false, createdAt, updatedAt).Exec(); err != nil {
 		return "", err
 	}
 
@@ -108,8 +111,12 @@ func (u *UserStorage) signUp(email string, password string, ctx context.Context)
 func (u *UserStorage) emailExists(email string) (bool, error) {
 	var exists bool
 	query := "SELECT COUNT(*) FROM users WHERE email = ?"
-	if err := u.session.Query(query, email).Scan(&exists); err != nil {
+
+	var count int
+	if err := u.session.Query(query, email).Scan(&count); err != nil {
 		return false, err
 	}
+	// If the count is greater than 0, the email exists
+	exists = count > 0
 	return exists, nil
 }

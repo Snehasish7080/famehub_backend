@@ -11,6 +11,8 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/snehasish7080/famehub/config"
+	"github.com/snehasish7080/famehub/internal/middleware"
+	"github.com/snehasish7080/famehub/internal/user"
 	"github.com/snehasish7080/famehub/pkg/shutdown"
 )
 
@@ -81,6 +83,13 @@ func buildServer(env config.EnvVars) (*fiber.App, func(), error) {
 	})
 
 	// create the middleware domain
+	middlewareStore := middleware.NewMiddlewareStorage(session)
+	appMiddleware := middleware.NewAuthMiddleware(middlewareStore)
+
+	// user domain
+	userStore := user.NewUserStorage(session)
+	userController := user.NewUserController(userStore)
+	user.AddUserRoutes(app, appMiddleware, userController)
 
 	return app, func() {
 		session.Close()
