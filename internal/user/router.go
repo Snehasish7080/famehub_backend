@@ -8,10 +8,14 @@ import (
 func AddUserRoutes(app *fiber.App, middleware *middleware.AuthMiddleware, controller *UserController) {
 	auth := app.Group("/auth")
 
+	// user sign up
 	auth.Post("/sign-up", controller.register)
 
+	// user login
+	auth.Post("/login", controller.loginUser)
+
 	// verify otp token
-	verifyEmail := auth.Group("/verify/otp", middleware.VerifyOtpToken)
-	verifyEmail.Post("/", controller.verifyOtp)
+	verifyOtp := auth.Group("/verify/otp", middleware.VerifyOtpToken)
+	verifyOtp.Post("/", controller.verifyOtp)
 
 }

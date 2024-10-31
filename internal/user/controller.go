@@ -114,3 +114,45 @@ func (u *UserController) verifyOtp(c *fiber.Ctx) error {
 	})
 
 }
+
+type loginRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
+}
+type loginResponse struct {
+	Token   string `json:"token"`
+	Message string `json:"message"`
+	Success bool   `json:"success"`
+}
+
+func (u *UserController) loginUser(c *fiber.Ctx) error {
+	var req loginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(loginResponse{
+			Message: "Invalid request body",
+			Success: false,
+		})
+	}
+
+	err := validate.Struct(req)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(loginResponse{
+			Message: "Invalid request body",
+			Success: false,
+		})
+	}
+
+	token, err := u.storage.login(req.Email, req.Password, c.Context())
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(loginResponse{
+			Message: err.Error(),
+			Success: false,
+		})
+	}
+	return c.Status(fiber.StatusOK).JSON(loginResponse{
+		Token:   token,
+		Success: true,
+		Message: "Found Successfully",
+	})
+
+}

@@ -69,7 +69,7 @@ func (u *UserStorage) signUp(email string, password string, ctx context.Context)
 	}
 
 	if exists {
-		return "", errors.New("email already exists")
+		return "", errors.New("Email already exists")
 	}
 
 	// Generate Otp
@@ -140,6 +140,59 @@ func (u *UserStorage) verifyOtp(userId string, otp string, ctx context.Context) 
 	// generate verified token
 	verifyToken, err := jwtclaim.CreateJwtToken(userId, true)
 
+	if err != nil {
+		return "", err
+	}
+
+	return verifyToken, nil
+
+}
+
+type User struct {
+	UUID     string `json:"uuid"`
+	Password string `json:"password"`
+}
+
+func (u *UserStorage) login(email string, password string, ctx context.Context) (string, error) {
+
+	// Check if email exists or not
+	exists, err := u.emailExists(email)
+	if err != nil {
+		return "", err
+	}
+
+	if !exists {
+		return "", errors.New("Email does not exists. Please signup.")
+	}
+
+	// getting user id and password
+	var user User
+	query := "SELECT uuid, password FROM users WHERE email = ?"
+	err = u.session.Query(query, email).Scan(&user.UUID, &user.Password)
+
+	if err != nil {
+		return "", err
+	}
+
+	// checking password
+	if !hash.CheckPasswordHash(password, user.Password) {
+		return "", errors.New("incorrect email or password")
+	}
+
+	// updating the otp
+	generatedOtp := otp.EncodeToString(6)
+
+	// Generate timestamp for the user
+	currentTime := time.Now()
+	updatedAt := currentTime
+	query = "UPDATE users SET otp = ?, updated_at = ? WHERE uuid = ? AND email = ?"
+	err = u.session.Query(query, generatedOtp, updatedAt, user.UUID, email).Exec()
+	if err != nil {
+		return "", err
+	}
+
+	// generating jwt for otp
+	verifyToken, err := jwtclaim.CreateJwtToken(user.UUID, false)
 	if err != nil {
 		return "", err
 	}
