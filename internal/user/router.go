@@ -10,4 +10,8 @@ func AddUserRoutes(app *fiber.App, middleware *middleware.AuthMiddleware, contro
 
 	auth.Post("/sign-up", controller.register)
 
+	// verify otp token
+	verifyEmail := auth.Group("/verify/otp", middleware.VerifyOtpToken)
+	verifyEmail.Post("/", controller.verifyOtp)
+
 }

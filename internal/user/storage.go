@@ -100,7 +100,7 @@ func (u *UserStorage) signUp(email string, password string, ctx context.Context)
 		return "", err
 	}
 
-	verifyToken, err := jwtclaim.CreateJwtToken(email, false)
+	verifyToken, err := jwtclaim.CreateJwtToken(UUID, false)
 	if err != nil {
 		return "", err
 	}
@@ -119,4 +119,31 @@ func (u *UserStorage) emailExists(email string) (bool, error) {
 	// If the count is greater than 0, the email exists
 	exists = count > 0
 	return exists, nil
+}
+
+func (u *UserStorage) verifyOtp(userId string, otp string, ctx context.Context) (string, error) {
+
+	var storedOTP string
+
+	// getting otp from db
+	query := "SELECT otp FROM users WHERE uuid = ?"
+	err := u.session.Query(query, userId).Scan(&storedOTP)
+
+	if err != nil {
+		return "", err
+	}
+
+	if storedOTP != otp {
+		return "", errors.New("Invalid OTP")
+	}
+
+	// generate verified token
+	verifyToken, err := jwtclaim.CreateJwtToken(userId, true)
+
+	if err != nil {
+		return "", err
+	}
+
+	return verifyToken, nil
+
 }

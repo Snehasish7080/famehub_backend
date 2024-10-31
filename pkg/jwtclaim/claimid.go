@@ -7,15 +7,15 @@ import (
 )
 
 type UserClaim struct {
-	Email      string `json:"email"`
+	Id         string `json:"id"`
 	IsVerified bool   `json:"isVerified"`
 	jwt.RegisteredClaims
 }
 
-func CreateJwtToken(userName string, isVerified bool) (string, error) {
+func CreateJwtToken(id string, isVerified bool) (string, error) {
 
 	claims := UserClaim{
-		userName,
+		id,
 		isVerified,
 		jwt.RegisteredClaims{
 			// A usual scenario is to set the expiration time relative to the current time
@@ -34,4 +34,22 @@ func CreateJwtToken(userName string, isVerified bool) (string, error) {
 	}
 
 	return tokenString, nil
+}
+
+func ExtractId(tokenStr string) (string, bool) {
+	hmacSecretString := "my_secret_key"
+	hmacSecret := []byte(hmacSecretString)
+
+	token, err := jwt.ParseWithClaims(tokenStr, &UserClaim{}, func(token *jwt.Token) (interface{}, error) {
+		return hmacSecret, nil
+	}, jwt.WithLeeway(5*time.Second))
+
+	if err != nil {
+		return "", false
+	}
+	if claims, ok := token.Claims.(*UserClaim); ok && token.Valid {
+		return claims.Id, ok
+	} else {
+		return "", false
+	}
 }
